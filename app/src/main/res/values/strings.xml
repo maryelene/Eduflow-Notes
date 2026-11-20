@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">EduFlow Notes</string>
+    <string name="tagline">Snap notes, highlight definitions, ace every subject.</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="signing_in">Signing in…</string>
+    <string name="sign_out">Sign out</string>
+    <string name="subjects_title">My Subjects</string>
+    <string name="add_subject">New Subject</string>
+    <string name="scan_note">Scan Page</string>
+    <string name="new_note">New Note</string>
+    <string name="pick_photo">Gallery Photo</string>
+    <string name="take_photo">Camera Snap</string>
+    <string name="extracting_text">Reading page &amp; finding definitions…</string>
+    <string name="find_definitions">Auto-Find Definitions</string>
+    <string name="save_note">Save Note</string>
+    <string name="reviewer_title">Subject Reviewer</string>
+    <string name="quiz_mode_label">Quiz Mode (Tap to Reveal)</string>
+    <string name="cd_back">Navigate back</string>
+    <string name="cd_hero_illustration">Pink study notebook and highlighter illustration</string>
+    <string name="cd_empty_illustration">Smartphone scanning study notes illustration</string>
+    <string name="cd_photo_preview">Tagged study page photo preview</string>
+</resources>

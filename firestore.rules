@@ -1,0 +1,110 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidSubject(data, userId) {
+      return data.userId is string &&
+             data.userId == userId &&
+             data.name is string &&
+             data.name.size() >= 1 &&
+             data.name.size() <= 60 &&
+             data.colorTag is string &&
+             data.colorTag in ['ROSE', 'BERRY', 'BLUSH', 'CORAL', 'PLUM', 'MAGENTA'] &&
+             data.iconName is string &&
+             data.iconName in ['BOOK', 'SCIENCE', 'HISTORY', 'MATH', 'LANGUAGE', 'ART'] &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidNote(data, userId) {
+      return data.userId is string &&
+             data.userId == userId &&
+             isValidId(data.subjectId) &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 120 &&
+             data.extractedText is string &&
+             data.extractedText.size() <= 25000 &&
+             data.photoTag is string &&
+             data.photoTag.size() <= 80 &&
+             data.thumbnailBase64 is string &&
+             data.thumbnailBase64.size() <= 120000 &&
+             data.highlights is list &&
+             data.highlights.size() <= 40 &&
+             (data.highlights.size() == 0 || data.highlights[0] is string) &&
+             data.definitions is list &&
+             data.definitions.size() <= 40 &&
+             (data.definitions.size() == 0 || data.definitions[0] is map) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    match /users/{userId}/subjects/{subjectId} {
+      allow get, list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(subjectId) &&
+                       incoming().keys().hasAll(['userId', 'name', 'colorTag', 'iconName', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'name', 'colorTag', 'iconName', 'createdAt', 'updatedAt']) &&
+                       isValidSubject(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(subjectId) &&
+                       isValidSubject(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'colorTag', 'iconName', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(subjectId);
+    }
+
+    match /users/{userId}/notes/{noteId} {
+      allow get, list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(noteId) &&
+                       incoming().keys().hasAll(['userId', 'subjectId', 'title', 'extractedText', 'photoTag', 'thumbnailBase64', 'highlights', 'definitions', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'subjectId', 'title', 'extractedText', 'photoTag', 'thumbnailBase64', 'highlights', 'definitions', 'createdAt', 'updatedAt']) &&
+                       isValidNote(incoming(), userId) &&
+                       exists(/databases/$(database)/documents/users/$(userId)/subjects/$(incoming().subjectId));
+
+      allow update: if isOwner(userId) &&
+                       isValidId(noteId) &&
+                       isValidNote(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['subjectId', 'title', 'extractedText', 'photoTag', 'thumbnailBase64', 'highlights', 'definitions', 'updatedAt']) &&
+                       exists(/databases/$(database)/documents/users/$(userId)/subjects/$(incoming().subjectId));
+
+      allow delete: if isOwner(userId) && isValidId(noteId);
+    }
+  }
+}

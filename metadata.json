@@ -1,0 +1,6 @@
+{
+  "name": "EduFlow Notes",
+  "description": "A pink-themed student study app to extract editable text from note photos, highlight key definitions, and build scrollable subject reviewers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

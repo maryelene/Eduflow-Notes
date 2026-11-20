@@ -1,0 +1,111 @@
+{
+  "entities": {
+    "Subject": {
+      "title": "Subject",
+      "description": "A school subject folder created by a student to organize notes and reviewers.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the subject (1-60 chars)."
+        },
+        "colorTag": {
+          "type": "string",
+          "description": "Pink-palette accent tag for the subject.",
+          "enum": ["ROSE", "BERRY", "BLUSH", "CORAL", "PLUM", "MAGENTA"]
+        },
+        "iconName": {
+          "type": "string",
+          "description": "Icon identifier for the subject.",
+          "enum": ["BOOK", "SCIENCE", "HISTORY", "MATH", "LANGUAGE", "ART"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp() on creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp() on creation and updates."
+        }
+      },
+      "required": ["userId", "name", "colorTag", "iconName", "createdAt", "updatedAt"]
+    },
+    "StudyNote": {
+      "title": "StudyNote",
+      "description": "A student note containing editable extracted text from photos, tagged photo preview, highlighted phrases, and key definitions.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "subjectId": {
+          "type": "string",
+          "description": "ID of the parent Subject document."
+        },
+        "title": {
+          "type": "string",
+          "description": "Note title (1-120 chars)."
+        },
+        "extractedText": {
+          "type": "string",
+          "description": "Editable text extracted from printed pages, handwriting, or typed directly."
+        },
+        "photoTag": {
+          "type": "string",
+          "description": "Short tag identifying the source photo or page (0-80 chars)."
+        },
+        "thumbnailBase64": {
+          "type": "string",
+          "description": "Compact compressed JPEG preview thumbnail encoded in base64 (0-120000 chars)."
+        },
+        "highlights": {
+          "type": "array",
+          "description": "Highlighted phrases or sentences marked right on screen (max 40)."
+        },
+        "definitions": {
+          "type": "array",
+          "description": "Extracted or manually highlighted key term and definition objects (max 40)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp() on creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp() on creation and updates."
+        }
+      },
+      "required": [
+        "userId",
+        "subjectId",
+        "title",
+        "extractedText",
+        "photoTag",
+        "thumbnailBase64",
+        "highlights",
+        "definitions",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/subjects/{subjectId}": {
+      "schema": { "$ref": "#/entities/Subject" },
+      "description": "Student-owned study subjects."
+    },
+    "/users/{userId}/notes/{noteId}": {
+      "schema": { "$ref": "#/entities/StudyNote" },
+      "description": "Student-owned extracted notes, tagged photos, highlights, and key definitions."
+    }
+  }
+}
