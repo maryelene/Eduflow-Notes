@@ -1,13 +1,13 @@
 package com.example.data.firebase
 
 import android.content.Context
-import com.example.R
 import com.example.data.model.DefinitionItem
 import com.example.data.model.StudyNote
 import com.example.data.model.Subject
 import com.example.data.model.SubjectColor
 import com.example.data.model.SubjectIcon
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.DocumentSnapshot
@@ -28,11 +28,30 @@ class NotesRepository(
     private val auth: FirebaseAuth = Firebase.auth,
     private val studyNoteRepository: StudyNoteRepository = StudyNoteRepository(db, auth)
 ) {
-    constructor(context: Context) : this(
-        FirebaseFirestore.getInstance(
-            context.applicationContext.getString(R.string.firestore_database_id)
-        )
-    )
+    companion object {
+        private const val DEFAULT_FIRESTORE_DATABASE_ID =
+            "ai-studio-android-eduflown-a6bee6e7-cae2-4f23-a85a-77dbd7638aae"
+
+        private fun resolveFirestore(context: Context): FirebaseFirestore {
+            val appContext = context.applicationContext
+            if (FirebaseApp.getApps(appContext).isEmpty()) {
+                FirebaseApp.initializeApp(appContext)
+            }
+            val resId = appContext.resources.getIdentifier(
+                "firestore_database_id",
+                "string",
+                appContext.packageName
+            )
+            val databaseId = if (resId != 0) {
+                appContext.getString(resId).trim().ifEmpty { DEFAULT_FIRESTORE_DATABASE_ID }
+            } else {
+                DEFAULT_FIRESTORE_DATABASE_ID
+            }
+            return FirebaseFirestore.getInstance(databaseId)
+        }
+    }
+
+    constructor(context: Context) : this(resolveFirestore(context))
 
     private fun requireUserId(expectedUserId: String? = null): String {
         val uid = auth.currentUser?.uid
@@ -44,10 +63,14 @@ class NotesRepository(
     }
 
     fun observeSubjects(userId: String): Flow<List<Subject>> = flow {
-        val uid = requireUserId(userId)
-        val path = "users/$uid/subjects"
+        val currentUid = auth.currentUser?.uid
+        if (currentUid == null || userId.isBlank() || currentUid != userId) {
+            emit(emptyList())
+            return@flow
+        }
+        val path = "users/$currentUid/subjects"
         emitAll(
-            db.collection("users").document(uid).collection("subjects")
+            db.collection("users").document(currentUid).collection("subjects")
                 .snapshots()
                 .map { snapshot ->
                     snapshot.toObjects(
@@ -61,7 +84,7 @@ class NotesRepository(
                         .firstOrNull()
                     if (firestoreError == null && error is CancellationException) throw error
                     val exceptionToLog = firestoreError ?: (error as? Exception)
-                    if (exceptionToLog != null && auth.currentUser?.uid == uid) {
+                    if (exceptionToLog != null && auth.currentUser?.uid == currentUid) {
                         handleFirestoreError(exceptionToLog, OperationType.LIST, path)
                     }
                     throw error
