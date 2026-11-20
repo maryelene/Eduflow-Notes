@@ -1,10 +1,10 @@
 package com.example.data.firebase
 
 import android.content.Context
-import com.example.R
 import com.example.data.model.DefinitionItem
 import com.example.data.model.StudyNote
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.DocumentSnapshot
@@ -24,11 +24,7 @@ class StudyNoteRepository(
     private val db: FirebaseFirestore,
     private val auth: FirebaseAuth = Firebase.auth
 ) {
-    constructor(context: Context) : this(
-        FirebaseFirestore.getInstance(
-            context.applicationContext.getString(R.string.firestore_database_id)
-        )
-    )
+    constructor(context: Context) : this(resolveFirestore(context))
 
     private fun requireUserId(expectedUserId: String? = null): String {
         val uid = auth.currentUser?.uid
@@ -43,10 +39,14 @@ class StudyNoteRepository(
         db.collection("users").document(uid).collection("notes")
 
     fun observeNotes(userId: String): Flow<List<StudyNote>> = flow {
-        val uid = requireUserId(userId)
-        val path = "users/$uid/notes"
+        val currentUid = auth.currentUser?.uid
+        if (currentUid == null || userId.isBlank() || currentUid != userId) {
+            emit(emptyList())
+            return@flow
+        }
+        val path = "users/$currentUid/notes"
         emitAll(
-            notesCollection(uid)
+            notesCollection(currentUid)
                 .snapshots()
                 .map { snapshot ->
                     snapshot.toObjects(
@@ -60,7 +60,7 @@ class StudyNoteRepository(
                         .firstOrNull()
                     if (firestoreError == null && error is CancellationException) throw error
                     val exceptionToLog = firestoreError ?: (error as? Exception)
-                    if (exceptionToLog != null && auth.currentUser?.uid == uid) {
+                    if (exceptionToLog != null && auth.currentUser?.uid == currentUid) {
                         handleFirestoreError(exceptionToLog, OperationType.LIST, path)
                     }
                     throw error
@@ -69,11 +69,14 @@ class StudyNoteRepository(
     }
 
     fun observeNotesBySubject(userId: String, subjectId: String): Flow<List<StudyNote>> = flow {
-        val uid = requireUserId(userId)
-        require(subjectId.isNotBlank()) { "Subject ID cannot be blank." }
-        val path = "users/$uid/notes"
+        val currentUid = auth.currentUser?.uid
+        if (currentUid == null || userId.isBlank() || currentUid != userId || subjectId.isBlank()) {
+            emit(emptyList())
+            return@flow
+        }
+        val path = "users/$currentUid/notes"
         emitAll(
-            notesCollection(uid)
+            notesCollection(currentUid)
                 .whereEqualTo("subjectId", subjectId)
                 .snapshots()
                 .map { snapshot ->
@@ -88,7 +91,7 @@ class StudyNoteRepository(
                         .firstOrNull()
                     if (firestoreError == null && error is CancellationException) throw error
                     val exceptionToLog = firestoreError ?: (error as? Exception)
-                    if (exceptionToLog != null && auth.currentUser?.uid == uid) {
+                    if (exceptionToLog != null && auth.currentUser?.uid == currentUid) {
                         handleFirestoreError(exceptionToLog, OperationType.LIST, path)
                     }
                     throw error
@@ -277,6 +280,27 @@ class StudyNoteRepository(
     }
 
     private companion object {
+        const val DEFAULT_FIRESTORE_DATABASE_ID =
+            "ai-studio-android-eduflown-a6bee6e7-cae2-4f23-a85a-77dbd7638aae"
+
         val ID_REGEX = Regex("^[a-zA-Z0-9_\\-]+$")
+
+        fun resolveFirestore(context: Context): FirebaseFirestore {
+            val appContext = context.applicationContext
+            if (FirebaseApp.getApps(appContext).isEmpty()) {
+                FirebaseApp.initializeApp(appContext)
+            }
+            val resId = appContext.resources.getIdentifier(
+                "firestore_database_id",
+                "string",
+                appContext.packageName
+            )
+            val databaseId = if (resId != 0) {
+                appContext.getString(resId).trim().ifEmpty { DEFAULT_FIRESTORE_DATABASE_ID }
+            } else {
+                DEFAULT_FIRESTORE_DATABASE_ID
+            }
+            return FirebaseFirestore.getInstance(databaseId)
+        }
     }
 }
