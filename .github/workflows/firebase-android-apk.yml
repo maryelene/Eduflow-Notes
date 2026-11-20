@@ -46,6 +46,9 @@ jobs:
     name: Compile EduFlow Notes APK
     needs: firestore-emulator-tests
     runs-on: ubuntu-latest
+    env:
+      GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+      RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -63,8 +66,8 @@ jobs:
         run: |
           chmod +x ./gradlew
           [ -f .env ] || cp .env.example .env
-          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" ]; then
-            echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 --decode > app/google-services.json
+          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+            echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
           fi
 
       - name: Create Debug Keystore (debugConfig)
@@ -92,17 +95,17 @@ jobs:
           if-no-files-found: error
 
       - name: Build Signed Release APK
-        if: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
+        if: env.RELEASE_KEYSTORE_BASE64 != ''
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > "$KEYSTORE_PATH"
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
           ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Upload Release APK
-        if: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
+        if: env.RELEASE_KEYSTORE_BASE64 != ''
         uses: actions/upload-artifact@v4
         with:
           name: eduflow-notes-release-apk
@@ -112,8 +115,11 @@ jobs:
   deploy-firebase-rules:
     name: Deploy Firestore Rules to Named Database
     needs: compile-apk
-    if: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_PROJECT_ID != '' && secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -124,10 +130,9 @@ jobs:
           node-version: "20"
 
       - name: Deploy Rules to ai-studio-android-eduflown-a6bee6e7-cae2-4f23-a85a-77dbd7638aae
-        env:
-          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        if: env.FIREBASE_PROJECT_ID != '' && env.FIREBASE_SERVICE_ACCOUNT != ''
         run: |
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > service-account.json
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > service-account.json
           export GOOGLE_APPLICATION_CREDENTIALS="$PWD/service-account.json"
           npx -y firebase-tools deploy \
             --config firebase.json \
