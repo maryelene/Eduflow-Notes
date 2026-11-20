@@ -26,7 +26,25 @@ jobs:
         with:
           gradle-version: current
 
-      - name: Prepare local.properties and Firebase config
+      - name: Generate debug keystore if missing
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+            echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > debug.keystore
+          elif [ ! -f "debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Prepare local.properties and Firebase resources
         env:
           LOCAL_PROPERTIES: ${{ secrets.LOCAL_PROPERTIES }}
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
@@ -40,6 +58,16 @@ jobs:
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             mkdir -p app
             echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
+          fi
+
+          if [ ! -f "app/google-services.json" ]; then
+            mkdir -p app/src/main/res/values
+            cat << 'EOF' > app/src/main/res/values/ci_fallback_strings.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="default_web_client_id" translatable="false">000000000000-placeholder.apps.googleusercontent.com</string>
+          </resources>
+          EOF
           fi
 
       - name: Build Debug APK
