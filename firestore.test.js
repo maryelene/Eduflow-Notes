@@ -173,8 +173,13 @@ test("Owner can create, update highlights/definitions, and query notes when subj
     })
   );
 
-  // List notes matching repository query
+  // List notes, single-note get, and subject-filtered query matching StudyNoteRepository
   await assertSucceeds(aliceDb.collection(`users/${ALICE_UID}/notes`).get());
+  await assertSucceeds(aliceDb.collection(`users/${ALICE_UID}/notes`).doc("note_1").get());
+  await assertSucceeds(
+    aliceDb.collection(`users/${ALICE_UID}/notes`).where("subjectId", "==", "subj_bio").get()
+  );
+  await assertSucceeds(aliceDb.collection(`users/${ALICE_UID}/notes`).doc("note_1").delete());
 
   // Reject future tampered timestamp
   await assertFails(

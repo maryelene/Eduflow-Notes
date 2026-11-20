@@ -25,7 +25,8 @@ import kotlinx.coroutines.tasks.await
 
 class NotesRepository(
     private val db: FirebaseFirestore,
-    private val auth: FirebaseAuth = Firebase.auth
+    private val auth: FirebaseAuth = Firebase.auth,
+    private val studyNoteRepository: StudyNoteRepository = StudyNoteRepository(db, auth)
 ) {
     constructor(context: Context) : this(
         FirebaseFirestore.getInstance(
@@ -68,31 +69,20 @@ class NotesRepository(
         )
     }
 
-    fun observeNotes(userId: String): Flow<List<StudyNote>> = flow {
-        val uid = requireUserId(userId)
-        val path = "users/$uid/notes"
-        emitAll(
-            db.collection("users").document(uid).collection("notes")
-                .snapshots()
-                .map { snapshot ->
-                    snapshot.toObjects(
-                        StudyNote::class.java,
-                        DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-                    ).sortedByDescending { it.updatedAt ?: it.createdAt }
-                }
-                .catch { error ->
-                    val firestoreError = generateSequence(error) { it.cause }
-                        .filterIsInstance<FirebaseFirestoreException>()
-                        .firstOrNull()
-                    if (firestoreError == null && error is CancellationException) throw error
-                    val exceptionToLog = firestoreError ?: (error as? Exception)
-                    if (exceptionToLog != null && auth.currentUser?.uid == uid) {
-                        handleFirestoreError(exceptionToLog, OperationType.LIST, path)
-                    }
-                    throw error
-                }
-        )
-    }
+    fun observeNotes(userId: String): Flow<List<StudyNote>> =
+        studyNoteRepository.observeNotes(userId)
+
+    fun observeNotesBySubject(userId: String, subjectId: String): Flow<List<StudyNote>> =
+        studyNoteRepository.observeNotesBySubject(userId, subjectId)
+
+    suspend fun getNotes(userId: String): Result<List<StudyNote>> =
+        studyNoteRepository.getNotes(userId)
+
+    suspend fun getNote(userId: String, noteId: String): Result<StudyNote?> =
+        studyNoteRepository.getNote(userId, noteId)
+
+    suspend fun saveNote(userId: String, note: StudyNote): Result<String> =
+        studyNoteRepository.saveNote(userId, note)
 
     suspend fun createSubject(
         userId: String,
@@ -193,36 +183,16 @@ class NotesRepository(
         thumbnailBase64: String,
         highlights: List<String>,
         definitions: List<DefinitionItem>
-    ): Result<String> {
-        val cleanTitle = title.trim().ifEmpty { "Untitled Note" }.take(120)
-        var docPath = "users/$userId/notes"
-        return try {
-            val uid = requireUserId(userId)
-            require(subjectId.isNotBlank()) { "Please select a subject first." }
-            require(extractedText.length <= 25000) { "Note text exceeds 25,000 characters." }
-            require(thumbnailBase64.length <= 120000) { "Photo thumbnail exceeds size limit." }
-
-            val docRef = db.collection("users").document(uid).collection("notes").document()
-            docPath = docRef.path
-            val note = StudyNote(
-                userId = uid,
-                subjectId = subjectId,
-                title = cleanTitle,
-                extractedText = extractedText,
-                photoTag = photoTag.trim().take(80),
-                thumbnailBase64 = thumbnailBase64,
-                highlights = highlights.take(40),
-                definitions = definitions.take(40)
-            )
-            docRef.set(note.toCreateMap(uid)).await()
-            Result.success(docRef.id)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.CREATE, docPath)
-            Result.failure(e)
-        }
-    }
+    ): Result<String> = studyNoteRepository.createNote(
+        userId = userId,
+        subjectId = subjectId,
+        title = title,
+        extractedText = extractedText,
+        photoTag = photoTag,
+        thumbnailBase64 = thumbnailBase64,
+        highlights = highlights,
+        definitions = definitions
+    )
 
     suspend fun updateNote(
         userId: String,
@@ -234,53 +204,18 @@ class NotesRepository(
         thumbnailBase64: String,
         highlights: List<String>,
         definitions: List<DefinitionItem>
-    ): Result<Unit> {
-        val cleanTitle = title.trim().ifEmpty { "Untitled Note" }.take(120)
-        val docPath = "users/$userId/notes/$noteId"
-        return try {
-            val uid = requireUserId(userId)
-            require(noteId.isNotBlank()) { "Note ID cannot be blank." }
-            require(subjectId.isNotBlank()) { "Please select a subject." }
-            require(extractedText.length <= 25000) { "Note text exceeds 25,000 characters." }
-            require(thumbnailBase64.length <= 120000) { "Photo thumbnail exceeds size limit." }
+    ): Result<Unit> = studyNoteRepository.updateNote(
+        userId = userId,
+        noteId = noteId,
+        subjectId = subjectId,
+        title = title,
+        extractedText = extractedText,
+        photoTag = photoTag,
+        thumbnailBase64 = thumbnailBase64,
+        highlights = highlights,
+        definitions = definitions
+    )
 
-            db.collection("users").document(uid).collection("notes").document(noteId)
-                .update(
-                    mapOf(
-                        "subjectId" to subjectId,
-                        "title" to cleanTitle,
-                        "extractedText" to extractedText,
-                        "photoTag" to photoTag.trim().take(80),
-                        "thumbnailBase64" to thumbnailBase64,
-                        "highlights" to highlights.take(40),
-                        "definitions" to definitions.take(40).map { it.toMap() },
-                        "updatedAt" to FieldValue.serverTimestamp()
-                    )
-                )
-                .await()
-            Result.success(Unit)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.UPDATE, docPath)
-            Result.failure(e)
-        }
-    }
-
-    suspend fun deleteNote(userId: String, noteId: String): Result<Unit> {
-        val docPath = "users/$userId/notes/$noteId"
-        return try {
-            val uid = requireUserId(userId)
-            require(noteId.isNotBlank()) { "Note ID cannot be blank." }
-            db.collection("users").document(uid).collection("notes").document(noteId)
-                .delete()
-                .await()
-            Result.success(Unit)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.DELETE, docPath)
-            Result.failure(e)
-        }
-    }
+    suspend fun deleteNote(userId: String, noteId: String): Result<Unit> =
+        studyNoteRepository.deleteNote(userId, noteId)
 }
