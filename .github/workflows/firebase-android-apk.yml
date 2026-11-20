@@ -61,11 +61,19 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: latest
 
-      - name: Prepare Secrets & Google Services Config
+      - name: Bootstrap Gradle Wrapper, Secrets & Google Services
         run: |
+          if [ ! -f ./gradlew ]; then
+            gradle wrapper
+          fi
           chmod +x ./gradlew
-          [ -f .env ] || cp .env.example .env
+          if [ ! -f .env ]; then
+            [ -f .env.example ] && cp .env.example .env || touch .env
+          fi
+          mkdir -p app
           if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
             echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
           fi
